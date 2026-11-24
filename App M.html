@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Eventos - Modo Oscuro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen">
+
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <!-- Encabezado -->
+        <header class="bg-slate-800 border border-slate-700 shadow-lg rounded-xl p-6 mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-cloud text-indigo-400"></i> Gestor de Eventos & Control
+                </h1>
+                <p class="text-sm text-slate-400">Sincronizado en tiempo real con Google Sheets.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="sincronizarConNube()" id="btn-sync" class="bg-slate-700 hover:bg-slate-600 text-indigo-300 text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm border border-slate-600">
+                    <i class="fa-solid fa-rotate" id="sync-icon"></i> Sincronizar con Google
+                </button>
+                <div class="flex bg-slate-900 p-1 rounded-lg border border-slate-700">
+                    <button onclick="switchTab('import')" id="btn-import" class="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white shadow-sm transition">1. Invitados</button>
+                    <button onclick="switchTab('tables')" id="btn-tables" class="px-4 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-white transition">2. Plano de Mesas</button>
+                    <button onclick="switchTab('checkin')" id="btn-checkin" class="px-4 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-white transition">3. Ingreso</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Indicador de Carga -->
+        <div id="loading-bar" class="hidden bg-indigo-600 text-white text-xs text-center py-1.5 mb-4 rounded-lg shadow transition font-medium">
+            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Comunicando con Google Sheets...
+        </div>
+
+        <!-- Contenido -->
+        <main>
+            <!-- PESTAÑA 1: INVITADOS -->
+            <section id="tab-import" class="space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Importar desde Excel / Google Sheets -->
+                    <div class="border border-emerald-800/60 bg-slate-800/60 backdrop-blur rounded-xl p-5 flex flex-col justify-between shadow-lg">
+                        <div>
+                            <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+                                <i class="fa-solid fa-file-excel text-emerald-400"></i> Importar Archivo
+                            </h2>
+                            <p class="text-xs text-slate-300 mb-4">
+                                Sube tu archivo (<strong>.xlsx, .xls o .csv</strong>). Columnas requeridas: <strong>Apellido y Nombre</strong>, <strong>DNI</strong> y <strong>Categoría</strong>.
+                            </p>
+                        </div>
+                        <div>
+                            <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="importarExcel(event)">
+                            <label for="excel-file" class="cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-4 py-2.5 rounded-lg inline-flex items-center gap-2 transition shadow-sm">
+                                <i class="fa-solid fa-cloud-arrow-up"></i> Seleccionar archivo Excel
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Carga Manual -->
+                    <div class="border border-slate-700 bg-slate-800/60 backdrop-blur rounded-xl p-5 flex flex-col justify-between shadow-lg">
+                        <div>
+                            <h2 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+                                <i class="fa-solid fa-user-plus text-indigo-400"></i> Carga Manual de Invitado
+                            </h2>
+                            <p class="text-xs text-slate-300 mb-3">Se sincroniza al instante con Google Sheets:</p>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <input type="text" id="nombre" placeholder="Apellido y Nombre" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500">
+                                <input type="text" id="dni" placeholder="Nro de DNI" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500">
+                                <input type="text" id="categoria" placeholder="Categoría (Ej. VIP)" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div class="flex justify-end">
+                                <button onclick="agregarInvitado()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg px-4 py-1.5 text-xs transition shadow-sm">
+                                    <i class="fa-solid fa-plus mr-1"></i> Agregar y Sincronizar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabla de Invitados -->
+                <div class="bg-slate-800 border border-slate-700 shadow-lg rounded-xl overflow-hidden">
+                    <div class="p-4 border-b border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-3">
+                        <h3 class="font-semibold text-slate-200 text-sm">Lista General (<span id="total-invitados">0</span>)</h3>
+                        <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+                            <input type="text" id="search-input" onkeyup="filtrarInvitados()" placeholder="Buscar por apellido, nombre o DNI..." class="bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-1.5 text-sm w-full sm:w-64 placeholder-slate-500 outline-none focus:ring-2 focus:ring-indigo-500">
+                            <button onclick="exportarExcelLocal()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition inline-flex items-center gap-1.5 shadow-sm shrink-0">
+                                <i class="fa-solid fa-file-excel"></i> Exportar por Mesas
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="sticky top-0 bg-slate-900 text-slate-400 border-b border-slate-700">
+                                <tr>
+                                    <th class="p-3">Apellido y Nombre</th>
+                                    <th class="p-3">DNI</th>
+                                    <th class="p-3">Categoría</th>
+                                    <th class="p-3">Mesa Asignada</th>
+                                    <th class="p-3">Estado</th>
+                                    <th class="p-3 text-right">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-invitados-body" class="divide-y divide-slate-700/50"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PESTAÑA 2: PLANO DE MESAS -->
+            <section id="tab-tables" class="hidden space-y-6">
+                <div class="bg-slate-800 border border-slate-700 shadow-lg rounded-xl p-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">Plano y Distribución de Mesas</h2>
+                        <p class="text-sm text-slate-400">Mesa Principal (16 asientos) y Mesas Secundarias (hasta 12 asientos).</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="nueva-mesa-nombre" placeholder="Nombre de Mesa (Ej. Mesa 1)" class="bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-1.5 text-sm placeholder-slate-500 outline-none">
+                        <button onclick="crearMesa()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg px-4 py-1.5 text-sm transition">Crear Mesa</button>
+                    </div>
+                </div>
+                <div id="grid-mesas" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            </section>
+
+            <!-- PESTAÑA 3: CONTROL DE INGRESO -->
+            <section id="tab-checkin" class="hidden space-y-6">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-slate-800 border border-slate-700 border-l-4 border-l-indigo-500 p-5 rounded-xl shadow-lg">
+                        <p class="text-sm text-slate-400 font-medium">Total</p>
+                        <h3 id="stat-total" class="text-2xl font-bold text-white">0</h3>
+                    </div>
+                    <div class="bg-slate-800 border border-slate-700 border-l-4 border-l-emerald-500 p-5 rounded-xl shadow-lg">
+                        <p class="text-sm text-slate-400 font-medium">Presentes</p>
+                        <h3 id="stat-presentes" class="text-2xl font-bold text-emerald-400">0</h3>
+                    </div>
+                    <div class="bg-slate-800 border border-slate-700 border-l-4 border-l-amber-500 p-5 rounded-xl shadow-lg">
+                        <p class="text-sm text-slate-400 font-medium">Pendientes</p>
+                        <h3 id="stat-pendientes" class="text-2xl font-bold text-amber-400">0</h3>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 border border-slate-700 shadow-lg rounded-xl p-6">
+                    <h2 class="text-lg font-semibold text-white mb-3">Control de Acceso en Puerta</h2>
+                    <input type="text" id="checkin-search" onkeyup="filtrarCheckin()" placeholder="Buscar por Apellido, Nombre o DNI..." class="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm mb-4 placeholder-slate-500 outline-none">
+                    <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="sticky top-0 bg-slate-900 text-slate-400 border-b border-slate-700">
+                                <tr>
+                                    <th class="p-3">Apellido y Nombre</th>
+                                    <th class="p-3">DNI</th>
+                                    <th class="p-3">Mesa</th>
+                                    <th class="p-3">Estado</th>
+                                    <th class="p-3 text-right">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-checkin-body" class="divide-y divide-slate-700/50"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwLpNS9asHahFPWnLIhWfUekru5cEDm-z9NuLAzMQC5kZ1YVvuGHpqNi3s6I4PO4VjI/exec";
+        
+        let invitados = [];
+        let mesas = ['Mesa Principal', 'Mesa 1', 'Mesa 2'];
+
+        window.onload = function() {
+            sincronizarConNube();
+        };
+
+        async function sincronizarConNube() {
+            document.getElementById('loading-bar').classList.remove('hidden');
+            try {
+                let response = await fetch(WEB_APP_URL, { cache: 'no-store' });
+                let data = await response.json();
+                if (data.error) {
+                    console.error(data.error);
+                    alert('Error en Google Sheets: ' + data.error);
+                    return;
+                }
+                invitados = data.map((item, idx) => ({
+                    id: idx + 1,
+                    nombre: item.nombre || '',
+                    dni: String(item.dni || ''),
+                    categoria: item.categoria || 'General',
+                    mesa: item.mesa || 'Sin asignar',
+                    ingresado: item.ingresado === true || item.ingresado === 'Sí'
+                }));
+                
+                let mesasNube = invitados.map(i => i.mesa).filter(m => m && m !== 'Sin asignar');
+                mesas = [...new Set([...mesas, ...mesasNube])];
+                
+                renderizarTodo();
+            } catch (err) {
+                console.error(err);
+                alert('No se pudo conectar con Google Sheets. Verifica la implementación web de Apps Script.');
+            }
+            document.getElementById('loading-bar').classList.add('hidden');
+        }
+
+        async function guardarEnNube() {
+            document.getElementById('loading-bar').classList.remove('hidden');
+            try {
+                await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(invitados)
+                });
+            } catch (err) {
+                console.error(err);
+            }
+            document.getElementById('loading-bar').classList.add('hidden');
+            renderizarTodo();
+        }
+
+        function switchTab(tab) {
+            ['import', 'tables', 'checkin'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`btn-${t}`).classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
+                document.getElementById(`btn-${t}`).classList.add('text-slate-400', 'hover:text-white');
+            });
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.getElementById(`btn-${tab}`).classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
+            document.getElementById(`btn-${tab}`).classList.remove('text-slate-400', 'hover:text-white');
+            
+            if(tab === 'tables') renderizarMesas();
+            if(tab === 'checkin') actualizarEstadisticas();
+        }
+
+        function agregarInvitado() {
+            const nombre = document.getElementById('nombre').value.trim();
+            const dni = document.getElementById('dni').value.trim();
+            const categoria = document.getElementById('categoria').value.trim() || 'General';
+
+            if (!nombre) {
+                alert('Por favor ingrese el Apellido y Nombre.');
+                return;
+            }
+
+            invitados.push({ id: Date.now() + Math.random(), nombre, dni, categoria, mesa: 'Sin asignar', ingresado: false });
+            document.getElementById('nombre').value = '';
+            document.getElementById('dni').value = '';
+            document.getElementById('categoria').value = '';
+            guardarEnNube();
+        }
+
+        function eliminarInvitado(id) {
+            if(confirm('¿Eliminar este invitado de la lista?')) {
+                invitados = invitados.filter(i => i.id !== id);
+                guardarEnNube();
+            }
+        }
+
+        function importarExcel(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                    
+                    if (json.length === 0) {
+                        alert('El archivo está vacío.');
+                        return;
+                    }
+
+                    let count = 0;
+                    json.forEach(row => {
+                        let keys = Object.keys(row);
+                        let colNombre = keys.find(k => /nombre|apellido|invitado/i.test(k)) || keys[0];
+                        let colDni = keys.find(k => /dni|documento|doc/i.test(k)) || keys[1];
+                        let colCat = keys.find(k => /categoria|cat|tipo/i.test(k)) || keys[2];
+                        let colMesa = keys.find(k => /mesa|ubicacion/i.test(k));
+
+                        let nombreVal = String(row[colNombre] || '').trim();
+                        let dniVal = String(colDni ? row[colDni] : '').trim();
+                        let catVal = String(colCat ? row[colCat] : 'General').trim();
+                        let mesaVal = colMesa ? String(row[colMesa] || '').trim() : 'Sin asignar';
+
+                        if (nombreVal) {
+                            if (mesaVal && mesaVal !== 'Sin asignar' && !mesas.includes(mesaVal)) {
+                                mesas.push(mesaVal);
+                            }
+                            invitados.push({
+                                id: Date.now() + Math.random(),
+                                nombre: nombreVal,
+                                dni: dniVal,
+                                categoria: catVal || 'General',
+                                mesa: mesaVal || 'Sin asignar',
+                                ingresado: false
+                            });
+                            count++;
+                        }
+                    });
+
+                    guardarEnNube();
+                    alert(`¡Se importaron ${count} invitados exitosamente y se sincronizaron con la nube!`);
+                } catch (err) {
+                    console.error(err);
+                    alert('Error al leer el archivo Excel.');
+                }
+                e.target.value = '';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function crearMesa() {
+            const nombreMesa = document.getElementById('nueva-mesa-nombre').value.trim();
+            if(!nombreMesa) return;
+            if(mesas.includes(nombreMesa)) {
+                alert('Esa mesa ya existe.');
+                return;
+            }
+            mesas.push(nombreMesa);
+            document.getElementById('nueva-mesa-nombre').value = '';
+            renderizarMesas();
+        }
+
+        function eliminarMesa(mesaNombre) {
+            if(confirm(`¿Eliminar la mesa "${mesaNombre}"? Los invitados volverán a "Sin asignar".`)) {
+                invitados.forEach(i => { if(i.mesa === mesaNombre) i.mesa = 'Sin asignar'; });
+                mesas = mesas.filter(m => m !== mesaNombre);
+                guardarEnNube();
+                renderizarMesas();
+            }
+        }
+
+        function asignarMesaInvitado(id, nuevaMesa) {
+            const inv = invitados.find(i => i.id === id);
+            if(inv) {
+                inv.mesa = nuevaMesa;
+                guardarEnNube();
+                renderizarMesas();
+            }
+        }
+
+        function toggleIngreso(id) {
+            const inv = invitados.find(i => i.id === id);
+            if(inv) {
+                inv.ingresado = !inv.ingresado;
+                guardarEnNube();
+            }
+        }
+
+        function renderizarTodo() {
+            renderizarTablaInvitados();
+            renderizarCheckin();
+            actualizarEstadisticas();
+        }
+
+        function renderizarTablaInvitados(filtro = '') {
+            const tbody = document.getElementById('tabla-invitados-body');
+            tbody.innerHTML = '';
+            const filtrados = invitados.filter(i => 
+                i.nombre.toLowerCase().includes(filtro.toLowerCase()) || 
+                i.dni.toLowerCase().includes(filtro.toLowerCase()) ||
+                i.categoria.toLowerCase().includes(filtro.toLowerCase())
+            );
+            document.getElementById('total-invitados').innerText = invitados.length;
+
+            if (filtrados.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">No hay registros en la nube.</td></tr>`;
+                return;
+            }
+
+            filtrados.forEach(inv => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-700/40 transition">
+                        <td class="p-3 font-medium text-white">${inv.nombre}</td>
+                        <td class="p-3 text-slate-300">${inv.dni || '-'}</td>
+                        <td class="p-3"><span class="bg-indigo-950 text-indigo-300 border border-indigo-800/50 text-xs px-2.5 py-1 rounded-full font-medium">${inv.categoria}</span></td>
+                        <td class="p-3 text-slate-300">${inv.mesa}</td>
+                        <td class="p-3">${inv.ingresado ? '<span class="text-emerald-400 font-medium text-xs bg-emerald-950/80 border border-emerald-800/50 px-2.5 py-1 rounded">Ingresado</span>' : '<span class="text-slate-400 text-xs bg-slate-800 border border-slate-700 px-2.5 py-1 rounded">Pendiente</span>'}</td>
+                        <td class="p-3 text-right"><button onclick="eliminarInvitado(${inv.id})" class="text-rose-400 hover:text-rose-300 text-xs font-medium"><i class="fa-solid fa-trash"></i></button></td>
+                    </tr>`;
+            });
+        }
+
+        function filtrarInvitados() { renderizarTablaInvitados(document.getElementById('search-input').value); }
+
+        function renderizarMesas() {
+            const container = document.getElementById('grid-mesas');
+            container.innerHTML = '';
+            let sinAsignar = invitados.filter(i => i.mesa === 'Sin asignar' || !i.mesa);
+
+            let htmlSinAsignar = `
+                <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 shadow-lg col-span-full">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-white"><i class="fa-solid fa-users mr-2 text-indigo-400"></i> Invitados Sin Asignar (${sinAsignar.length})</h3>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                        ${sinAsignar.length === 0 ? '<p class="text-xs text-slate-500 italic col-span-full">Todos los invitados ya tienen su mesa asignada.</p>' : ''}
+                        ${sinAsignar.map(inv => `
+                            <div class="bg-slate-900 border border-slate-700 p-2.5 rounded-xl text-xs flex justify-between items-center">
+                                <span class="text-slate-200 font-medium truncate max-w-[140px]">${inv.nombre}</span>
+                                <select onchange="asignarMesaInvitado(${inv.id}, this.value)" class="text-xs border border-slate-700 rounded-lg p-1 bg-slate-800 text-white outline-none">
+                                    <option value="Sin asignar">Mover a...</option>
+                                    ${mesas.map(m => `<option value="${m}">${m}</option>`).join('')}
+                                </select>
+                            </div>`).join('')}
+                    </div>
+                </div>`;
+            container.innerHTML += htmlSinAsignar;
+
+            mesas.forEach(mesa => {
+                let asignados = invitados.filter(i => i.mesa === mesa);
+                let esPrincipal = mesa.toLowerCase().includes('principal');
+                let capacidadMax = esPrincipal ? 16 : 12;
+                
+                let sillasHtml = '';
+                for (let s = 1; s <= capacidadMax; s++) {
+                    let invitadoEnSilla = asignados[s - 1];
+                    let nombreInvitado = invitadoEnSilla ? invitadoEnSilla.nombre : `<span class="text-slate-500 italic font-normal">Silla ${s} (Vacía)</span>`;
+                    let idInv = invitadoEnSilla ? invitadoEnSilla.id : null;
+                    
+                    sillasHtml += `
+                        <div class="bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl text-xs flex justify-between items-center">
+                            <span class="text-slate-200 truncate max-w-[180px]"><strong>${s}-</strong> ${nombreInvitado}</span>
+                            ${idInv ? `<button onclick="asignarMesaInvitado(${idInv}, 'Sin asignar')" class="text-rose-400 hover:text-rose-300 text-xs ml-2" title="Quitar de la mesa"><i class="fa-solid fa-xmark"></i></button>` : ''}
+                        </div>`;
+                }
+
+                container.innerHTML += `
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded-full bg-indigo-950 flex items-center justify-center text-indigo-400 text-sm border border-indigo-800">
+                                        <i class="fa-solid fa-circle-dot"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-white text-base">${mesa} ${esPrincipal ? '<span class="text-xs bg-indigo-900 text-indigo-200 px-2 py-0.5 rounded ml-1">Principal (16)</span>' : ''}</h3>
+                                        <span class="text-[11px] text-slate-400">NAKA Eventos • Ocupación: <strong>${asignados.length}/${capacidadMax}</strong></span>
+                                    </div>
+                                </div>
+                                <button onclick="eliminarMesa('${mesa}')" class="text-slate-400 hover:text-rose-400 text-xs px-2 py-1 bg-slate-900 rounded-lg transition" title="Eliminar Mesa">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+
+                            <div class="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Asientos / Sillas (Máx. ${capacidadMax}):</p>
+                                ${sillasHtml}
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function renderizarCheckin(filtro = '') {
+            const tbody = document.getElementById('tabla-checkin-body');
+            tbody.innerHTML = '';
+            const filtrados = invitados.filter(i => 
+                i.nombre.toLowerCase().includes(filtro.toLowerCase()) || 
+                i.dni.toLowerCase().includes(filtro.toLowerCase())
+            );
+
+            if (filtrados.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">No se encontraron invitados.</td></tr>`;
+                return;
+            }
+
+            filtrados.forEach(inv => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-700/40 transition">
+                        <td class="p-3">
+                            <div class="font-medium text-white">${inv.nombre}</div>
+                            <div class="text-xs text-slate-400">${inv.categoria}</div>
+                        </td>
+                        <td class="p-3 text-sm text-slate-300">${inv.dni || '-'}</td>
+                        <td class="p-3 text-sm text-slate-300">${inv.mesa}</td>
+                        <td class="p-3">
+                            ${inv.ingresado ? 
+                                '<span class="inline-flex items-center gap-1 bg-emerald-950/80 border border-emerald-800/50 text-emerald-400 text-xs font-semibold px-2.5 py-1 rounded-full"><i class="fa-solid fa-check"></i> Presente</span>' : 
+                                '<span class="inline-flex items-center gap-1 bg-amber-950/80 border border-amber-800/50 text-amber-400 text-xs font-semibold px-2.5 py-1 rounded-full"><i class="fa-solid fa-clock"></i> Pendiente</span>'}
+                        </td>
+                        <td class="p-3 text-right">
+                            <button onclick="toggleIngreso(${inv.id})" class="px-3 py-1.5 text-xs font-medium rounded-lg transition ${inv.ingresado ? 'bg-amber-700 hover:bg-amber-600 text-white' : 'bg-emerald-600 text-white hover:bg-emerald-500'}">
+                                ${inv.ingresado ? 'Marcar Ausente' : 'Dar Ingreso'}
+                            </button>
+                        </td>
+                    </tr>`;
+            });
+        }
+
+        function filtrarCheckin() { renderizarCheckin(document.getElementById('checkin-search').value); }
+
+        function actualizarEstadisticas() {
+            const total = invitados.length;
+            const presentes = invitados.filter(i => i.ingresado).length;
+            const pendientes = total - presentes;
+
+            document.getElementById('stat-total').innerText = total;
+            document.getElementById('stat-presentes').innerText = presentes;
+            document.getElementById('stat-pendientes').innerText = pendientes;
+            
+            const searchEl = document.getElementById('checkin-search');
+            if (searchEl) {
+                renderizarCheckin(searchEl.value);
+            }
+        }
+
+        function exportarExcelLocal() {
+            if (invitados.length === 0) {
+                alert('No hay invitados para exportar.');
+                return;
+            }
+            let invitadosOrdenados = [...invitados].sort((a, b) => {
+                let mesaA = (a.mesa || 'Sin asignar').toLowerCase();
+                let mesaB = (b.mesa || 'Sin asignar').toLowerCase();
+                if (mesaA < mesaB) return -1;
+                if (mesaA > mesaB) return 1;
+                return a.nombre.localeCompare(b.nombre);
+            });
+
+            let datos = invitadosOrdenados.map((inv, i) => ({
+                'N°': i + 1,
+                'Mesa Asignada': inv.mesa,
+                'Apellido y Nombre': inv.nombre,
+                'DNI': inv.dni || '-',
+                'Categoría': inv.categoria,
+                'Estado de Ingreso': inv.ingresado ? 'Presente' : 'Pendiente'
+            }));
+
+            let ws = XLSX.utils.json_to_sheet(datos);
+            let workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, ws, "Invitados por Mesa");
+
+            ws['!cols'] = [
+                {wch: 5}, {wch: 20}, {wch: 30}, {wch: 15}, {wch: 15}, {wch: 18}
+            ];
+
+            XLSX.writeFile(workbook, "Control_Evento_Mesas.xlsx");
+        }
+    </script>
+</body>
+</html>
